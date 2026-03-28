@@ -1,0 +1,12 @@
+[submodule "deps/flecs"]
+	path = deps/flecs
+	url = https://github.com/SanderMertens/flecs.git
+[submodule "deps/libzmq"]
+	path = deps/libzmq
+	url = https://github.com/zeromq/libzmq.git
+[submodule "deps/cppzmq"]
+	path = deps/cppzmq
+	url = https://github.com/zeromq/cppzmq.git
+[submodule "deps/deps/msgpack-c"]
+	path = deps/deps/msgpack-c
+	url = https://github.com/msgpack/msgpack-c.git
