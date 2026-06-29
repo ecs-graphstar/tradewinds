@@ -1,27 +1,27 @@
 cmake_minimum_required(VERSION 3.18)
-project(project)
+project(tradewinds)
 
-add_executable(${PROJECT_NAME} src/main.cpp src/tradewinds.cpp)
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
-target_include_directories(${PROJECT_NAME} PRIVATE "src")
+# Tradewinds is built as a SHARED library and integrated into a parent project.
+# The parent project is expected to provide the `flecs` target; tradewinds only
+# owns its nested libzmq + msgpack-cxx dependencies.
 
-target_include_directories(${PROJECT_NAME} PRIVATE "deps/cppzmq")
-
-# flecs
-set(BUILD_SHARED_LIBS ON CACHE BOOL "Build Flecs as a shared library" FORCE)
-add_subdirectory("deps/flecs")
-target_link_libraries(${PROJECT_NAME} PRIVATE flecs)
-
-include_directories(deps/msgpack-c/include)
+# msgpack-cxx (header-only INTERFACE target)
 add_subdirectory("deps/msgpack-c")
-target_link_libraries(${PROJECT_NAME} PRIVATE msgpack-cxx)
 
-# build libzmq from source
+# libzmq (shared)
 set(WITH_DOC OFF CACHE BOOL "" FORCE)
 set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED ON CACHE BOOL "" FORCE)
 set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
 add_subdirectory("deps/libzmq")
 
-target_link_libraries(${PROJECT_NAME} PRIVATE libzmq)
-target_include_directories(${PROJECT_NAME} PRIVATE "deps/libzmq/include")
+add_library(tradewinds SHARED src/tradewinds.cpp)
+set_property(TARGET tradewinds PROPERTY CXX_STANDARD 17)
+
+target_include_directories(tradewinds PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/deps/cppzmq"
+    "${CMAKE_CURRENT_SOURCE_DIR}/deps/libzmq/include"
+)
+
+target_link_libraries(tradewinds PUBLIC flecs libzmq msgpack-cxx)

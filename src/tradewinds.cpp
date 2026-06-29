@@ -1,4 +1,5 @@
 #include <tradewinds.h>
+#include <sys/prctl.h>
 
 namespace tradewinds {
 
@@ -8,6 +9,55 @@ module::module(flecs::world& ecs)
 
     ecs.component<ZMQContext>();
     ecs.component<ZMQServer>();
+    ecs.component<SpawnRequest>();
+    ecs.component<LinuxProcess>();
+
+    ecs.observer<LinuxProcess>()
+        .event(flecs::OnRemove)
+        .each([](flecs::entity e, LinuxProcess& p) {
+            if (p.pid > 0) {
+                kill(-p.pid, SIGTERM);
+                waitpid(p.pid, nullptr, WNOHANG); // Non-blocking cleanup
+                std::cout << "Process group " << p.pid << " cleaned up." << std::endl;
+            }
+        });
+
+    ecs.observer<SpawnRequest>()
+        .event(flecs::OnSet)
+        .each([](flecs::entity e, SpawnRequest& req) {
+            pid_t pid = fork();
+
+            if (pid == -1) {
+                // e.set<ProcessError>({errno});
+                e.remove<SpawnRequest>();
+                return;
+            }
+
+            if (pid == 0) {
+
+                prctl(PR_SET_PDEATHSIG, SIGTERM);
+                setpgid(0, 0); // Use process group so conda properly destroys python child
+
+                if (!req.directory.empty()) {
+                    if (chdir(req.directory.c_str()) == -1) {
+                        perror("chdir failed");
+                        _exit(1);
+                    }
+                }
+
+                std::vector<char*> c_args;
+                c_args.push_back(const_cast<char*>(req.command.c_str()));
+                for (auto& a : req.args) c_args.push_back(const_cast<char*>(a.c_str()));
+                c_args.push_back(nullptr);
+
+                execvp(c_args[0], c_args.data());
+                _exit(1);
+            }
+
+            // Parent: Successfully spawned
+            e.set<LinuxProcess>({pid});
+            std::cout << "Spawned " << req.command << " with PID " << pid << std::endl;
+        });
 
     ecs.observer<ZMQServer>()
         .event(flecs::OnSet)
@@ -105,6 +155,7 @@ module::module(flecs::world& ecs)
         });
 
     ecs.system<AwaitResponse, ZMQClient>()
+        .kind(flecs::PreUpdate)
         .without<SendMapRequest>()
         .each([](flecs::entity e, AwaitResponse& onResponse, ZMQClient& client)
         {
@@ -116,6 +167,17 @@ module::module(flecs::world& ecs)
                 auto res_map = obj.as<std::map<std::string, msgpack::object>>();
                 onResponse.response_function(res_map);
                 e.remove<AwaitResponse>();
+            }
+        });
+
+    ecs.system<LinuxProcess>("ProcessMonitor")
+        .each([](flecs::entity e, LinuxProcess& p) {
+            int status;
+            pid_t result = waitpid(p.pid, &status, WNOHANG);
+
+            if (result > 0) {
+                std::cout << "Process " << p.pid << " exited. Removing entity." << std::endl;
+                e.destruct();
             }
         });
 

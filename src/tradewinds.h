@@ -1,4 +1,4 @@
-// Tradewinds is a module for flecs that supports networking with ZeroMQ in flecs
+// Tradewinds is a module for flecs that supports process spawning and networking with ZeroMQ
 // through data oriented component observers and callbacks
 
 #ifndef TRADEWINDS_H
@@ -13,8 +13,11 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
 #include <functional>
 #include <map>
+#include <vector>
 
 #include <msgpack.hpp>
 
@@ -53,9 +56,21 @@ struct AwaitResponse
     std::function<void(std::map<std::string, msgpack::object>&)> response_function;
 };
 
-struct SendMapRequest 
+struct SendMapRequest
 {
     std::map<std::string, std::string> data;
+};
+
+struct SpawnRequest {
+    std::string command;
+    std::vector<std::string> args;
+    std::string directory;
+};
+
+struct LinuxProcess
+{
+    pid_t pid;
+    int stdout_fd = -1;
 };
 
 struct module {
